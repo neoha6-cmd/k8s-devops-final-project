@@ -1,0 +1,8 @@
+*.tfstate*
+.terraform/
+terraform.tfvars
+*.pem
+*_key
+id_*
+kubeconfig
+admin.conf
