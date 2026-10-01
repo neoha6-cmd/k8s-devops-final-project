@@ -1,0 +1,5 @@
+---
+cp1_ip: "10.0.1.10"
+w1_ip: "10.0.1.11"
+cluster_user: "ali"
+pod_network_cidr: "192.168.0.0/16"
