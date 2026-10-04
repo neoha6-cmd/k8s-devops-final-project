@@ -1,0 +1,6 @@
+---
+- import_playbook: prerequisites.yml # all nodes
+- import_playbook: containerd.yml    # all nodes
+- import_playbook: kubernetes.yml    # all nodes
+- import_playbook: control-plane.yml # cp1 only
+- import_playbook: workers.yml       # w1 only

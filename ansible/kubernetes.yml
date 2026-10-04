@@ -1,0 +1,36 @@
+---
+- name: Install Kubernetes components
+  hosts: k8s_cluster
+  become: true
+  tasks:
+    - name: Add Kubernetes v1.36 repository
+      ansible.builtin.yum_repository:
+        name: kubernetes
+        description: Kubernetes
+        baseurl: https://pkgs.k8s.io/core:/stable:/v1.36/rpm/
+        gpgcheck: true
+        gpgkey: https://pkgs.k8s.io/core:/stable:/v1.36/rpm/repodata/repomd.xml.key
+        exclude: kubelet kubeadm kubectl cri-tools kubernetes-cni
+        enabled: true
+
+    - name: Install kubelet, kubeadm and kubectl
+      ansible.builtin.dnf:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        disable_excludes: kubernetes
+
+    - name: Enable kubelet
+      ansible.builtin.service:
+        name: kubelet
+        enabled: true
+
+    - name: Disable firewalld
+      ansible.builtin.service:
+        name: firewalld
+        state: stopped
+        enabled: false
+      register: fw
+      failed_when: fw is failed and 'Could not find' not in (fw.msg | default(''))

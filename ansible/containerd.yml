@@ -1,0 +1,40 @@
+---
+- name: Install and configure containerd
+  hosts: k8s_cluster
+  become: true
+  tasks:
+    - name: Add Docker CE repository
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/rhel/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+        mode: "0644"
+
+    - name: Install containerd.io
+      ansible.builtin.dnf:
+        name: containerd.io
+        state: present
+
+    - name: Check if SystemdCgroup is already enabled
+      ansible.builtin.command: grep -q "SystemdCgroup = true" /etc/containerd/config.toml
+      register: cgroup_check
+      failed_when: false
+      changed_when: false
+
+    - name: Generate config with SystemdCgroup = true
+      ansible.builtin.shell: >
+        containerd config default |
+        sed 's/SystemdCgroup = false/SystemdCgroup = true/' > /etc/containerd/config.toml
+      when: cgroup_check.rc != 0
+      notify: Restart containerd
+
+    - name: Enable and start containerd
+      ansible.builtin.service:
+        name: containerd
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart containerd
+      ansible.builtin.service:
+        name: containerd
+        state: restarted

@@ -1,0 +1,51 @@
+---
+- name: Initialize the control plane
+  hosts: k8s_master
+  become: true
+  tasks:
+    - name: Check if the cluster is already initialized
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: kube_admin
+
+    - name: Run kubeadm init
+      ansible.builtin.command: >
+        kubeadm init
+        --pod-network-cidr={{ pod_network_cidr }}
+        --apiserver-advertise-address={{ cp1_ip }}
+      when: not kube_admin.stat.exists
+
+    - name: Create .kube directory for the automation user
+      ansible.builtin.file:
+        path: "/home/{{ cluster_user }}/.kube"
+        state: directory
+        owner: "{{ cluster_user }}"
+        group: "{{ cluster_user }}"
+        mode: "0755"
+
+    - name: Copy admin.conf for the automation user
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "/home/{{ cluster_user }}/.kube/config"
+        remote_src: true
+        owner: "{{ cluster_user }}"
+        group: "{{ cluster_user }}"
+        mode: "0600"
+
+    - name: Apply Calico CNI v3.31.0
+      ansible.builtin.command: >
+        kubectl apply -f
+        https://raw.githubusercontent.com/projectcalico/calico/v3.31.0/manifests/calico.yaml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: calico
+      changed_when: "'created' in calico.stdout or 'configured' in calico.stdout"
+
+    - name: Generate the join command
+      ansible.builtin.command: kubeadm token create --print-join-command
+      register: join_cmd
+      changed_when: false
+
+    - name: Store the join command for the workers play
+      ansible.builtin.set_fact:
+        kube_join_command: "{{ join_cmd.stdout }}"
