@@ -6,3 +6,8 @@ terraform.tfvars
 id_*
 kubeconfig
 admin.conf
+.venv/
+__pycache__/
+instance/
+*.db
+.pytest_cache/

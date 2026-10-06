@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Task Tracker</title>
+  <style>
+    body { font-family: sans-serif; max-width: 720px; margin: 2rem auto; }
+    li { margin: .4rem 0; }
+    .low { color: #2e7d32; } .medium { color: #ef6c00; } .high { color: #c62828; }
+    .done .title { text-decoration: line-through; opacity: .6; }
+    form.inline { display: inline; }
+  </style>
+</head>
+<body>
+  <h1>Task Tracker <small>v{{ version }}</small></h1>
+  <form method="post" action="/tasks">
+    <input name="title" placeholder="New task" maxlength="120" required>
+    <select name="priority">
+      {% for p in priorities %}
+      <option value="{{ p }}" {% if p == "medium" %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Add</button>
+  </form>
+  <ul>
+    {% for t in tasks %}
+    <li class="{{ 'done' if t.done }}">
+      <strong class="{{ t.priority }}">[{{ t.priority }}]</strong>
+      <span class="title">{{ t.title }}</span>
+      <form class="inline" method="post" action="/tasks/{{ t.id }}/toggle"><button>done/undo</button></form>
+      <form class="inline" method="post" action="/tasks/{{ t.id }}/delete"><button>delete</button></form>
+    </li>
+    {% else %}
+    <li>No tasks yet.</li>
+    {% endfor %}
+  </ul>
+</body>
+</html>
