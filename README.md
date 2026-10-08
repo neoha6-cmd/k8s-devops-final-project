@@ -78,3 +78,46 @@ Why is the control plane node in NotReady status until Calico CNI is applied? Wi
 
 ### Task 15: Join the worker and verify the cluster
 `ansible-playbook -i inventory.ini site.yml` builds the whole cluster. Both nodes report Ready in `kubectl get nodes -o wide`.
+
+## Part F: Application, Containerization and CI/CD
+
+### Task 16: Application feature and tests
+The Task Tracker (Flask + SQLAlchemy) has a `priority` field (low, medium, high; default medium) in the model, the API (invalid values return 400) and the UI. `app/tests/test_app.py` has 5 pytest tests and `app/scripts/seed.py` seeds 10 sample tasks without duplicating them.
+
+### Task 17: Dockerfile and Compose
+1. Advantage of a slim base image: it is much smaller because it leaves out compilers and extra packages, so pulls and builds are faster and the attack surface is smaller.
+2. /health vs /ready: /health (liveness) says the process is alive and a failure restarts the container. /ready (readiness) says the app can serve traffic, here that the database is reachable, and a failure only removes the pod from the service endpoints.
+
+### Task 18: CI/CD pipeline
+`.github/workflows/ci-cd.yml`: flake8 and pytest, Terraform fmt/validate, then build and push the image to GHCR tagged with the commit SHA and `latest` on pushes to main.
+
+### Task 19: Kubernetes deployment
+`k8s/` holds the PostgreSQL Deployment, Service, Secret and PV/PVC plus the app Deployment (2 replicas from GHCR) and a NodePort Service (30080). The cluster has no default StorageClass, so a hostPath PV pinned to w1 is used. The Secret holds lab-only values; a real deployment would use an external secret manager.
+
+## Part G: Documentation and Cleanup
+
+### Task 20: Quick reproduction (Path B, VMware)
+1. Create two Rocky Linux VMs (2 vCPU, 4 GB RAM, 40 GB disk) on VMnet8 set to 10.0.1.0/24 (gateway 10.0.1.2): k8slab-cp1 = 10.0.1.10, k8slab-w1 = 10.0.1.11.
+2. Create the automation user and SSH key login (Part C), then on cp1 install ansible-core and clone this repository.
+3. `cd ansible && ansible-playbook -i inventory.ini prepare-nodes.yml`
+4. `ansible-playbook -i inventory.ini site.yml` builds the Kubernetes cluster.
+5. `kubectl apply -f k8s/` and open http://10.0.1.10:30080
+6. Local checks: `cd app && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements-dev.txt && pytest -v`, `docker compose up -d --build`, and `cd terraform && terraform init -backend=false && terraform fmt -check && terraform validate`.
+
+### Post-mortem 1: VMs lost connectivity after changing the IP
+- Error: after assigning 10.0.1.x addresses the VMs lost internet and SSH access.
+- Cause: the VMware NAT network (VMnet8) was still 192.168.5.0/24 with gateway 192.168.5.2, so the new address and gateway were outside the NAT subnet.
+- Fix: set the VMnet8 subnet to 10.0.1.0/24 (gateway 10.0.1.2) first, then configured the static IP, gateway and DNS with nmcli. Verified with ping to the gateway and to the internet.
+
+### Post-mortem 2: SSH "Connection reset by peer" from cp1 to w1
+- Error: ssh-copy-id and Ansible failed with `kex_exchange_identification: Connection reset by peer`.
+- Cause (suspected): the OpenSSH version in Rocky 10 penalizes a source address after repeated failed or aborted authentications (PerSourcePenalties), so w1 dropped connections from cp1.
+- Fix: restarted sshd (the penalties live in memory), added the controller to PerSourcePenaltyExemptList, and installed the public key manually in authorized_keys with correct ownership, permissions and `restorecon`. Ansible then reached w1.
+
+### Post-mortem 3: Pods stuck in ContainerCreating
+- Error: `FailedCreatePodSandBox ... plugin type="calico" failed (add): error getting ClusterInformation: connection is unauthorized`.
+- Cause (likely): the Calico CNI on w1 had stale credentials for the Kubernetes API, so no pod network could be created.
+- Fix: deleted the calico-node pod on w1 so the DaemonSet recreated it with fresh credentials, then ran `kubectl rollout restart` on the deployments. The pods became Running.
+
+### Task 21: Teardown
+Path B has no cloud resources, so `terraform destroy` does not apply. The VMware VMs are shut down (`sudo shutdown now` on both) to free resources.
